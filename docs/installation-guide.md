@@ -41,9 +41,9 @@ Medusa is a standalone backend
 
 ### start.sh: the heart of the boot
 
-1. ❌ Common mistake
+1. Common mistake
     - Running seed without using exec causes a restart loop.
-2. ✅ Correct version of start.sh
+2. Correct version of start.sh
 
 ```
 #!/bin/sh
@@ -60,17 +60,17 @@ exec npm run dev
 ```
 
 3. Important rules
-   - ❌ DO NOT run seed on every boot
-   - ✅ The seed is executed only once, manually.
-   - ✅ exec is required to prevent Docker from restarting the container
+   - DO NOT run seed on every boot
+   - The seed is executed only once, manually.
+   - exec is required to prevent Docker from restarting the container
 
 ### Data seed
 
-1. ❌ Common mistake
+1. Common mistake
     - The seed is NOT idempotent
     - Running it more than once breaks the boot process
 
-2. ✅ Correct form
+2. Correct form
     ```
     docker exec -it medusa_backend npm run seed
     ```
@@ -166,8 +166,8 @@ module.exports = defineConfig({
 ```
 
 Golden Rule
-- ❌ Never disable SSL in production
-- ✅ Use Node.env to change behavior
+- Never disable SSL in production
+- Use Node.env to change behavior
 
 ### Medusa Admin + Vite (Docker)
 

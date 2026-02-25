@@ -1,46 +1,8 @@
-<p align="center">
-  <a href="https://www.medusajs.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/59018053/229103275-b5e482bb-4601-46e6-8142-244f531cebdb.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    <img alt="Medusa logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    </picture>
-  </a>
-</p>
-<h1 align="center">
-  Medusa
-</h1>
-
-<h4 align="center">
-  <a href="https://docs.medusajs.com">Documentation</a> |
-  <a href="https://www.medusajs.com">Website</a>
-</h4>
-
-<p align="center">
-  Building blocks for digital commerce
-</p>
-<p align="center">
-  <a href="https://github.com/medusajs/medusa/blob/master/CONTRIBUTING.md">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs welcome!" />
-  </a>
-    <a href="https://www.producthunt.com/posts/medusa"><img src="https://img.shields.io/badge/Product%20Hunt-%231%20Product%20of%20the%20Day-%23DA552E" alt="Product Hunt"></a>
-  <a href="https://discord.gg/xpCwq3Kfn8">
-    <img src="https://img.shields.io/badge/chat-on%20discord-7289DA.svg" alt="Discord Chat" />
-  </a>
-  <a href="https://twitter.com/intent/follow?screen_name=medusajs">
-    <img src="https://img.shields.io/twitter/follow/medusajs.svg?label=Follow%20@medusajs" alt="Follow @medusajs" />
-  </a>
-</p>
-
 ## Compatibility
 
 This starter is compatible with versions >= 2 of `@medusajs/medusa`. 
 
-## Getting Started
-
-Visit the [Quickstart Guide](https://docs.medusajs.com/learn/installation) to set up a server.
-
-Visit the [Docs](https://docs.medusajs.com/learn/installation#get-started) to learn more about our system requirements.
+Node 20+ is mandatory
 
 ## What is Medusa
 
@@ -48,29 +10,198 @@ Medusa is a set of commerce modules and tools that allow you to build rich, reli
 
 Learn more about [Medusa’s architecture](https://docs.medusajs.com/learn/introduction/architecture) and [commerce modules](https://docs.medusajs.com/learn/fundamentals/modules/commerce-modules) in the Docs.
 
-## Build with AI Agents
+## Getting Started
 
-### Claude Code Plugin
+This document summarizes everything important learned during the installation and launch of Medusa using Docker, focusing on avoiding common mistakes, understanding why things are done, and getting the project ready for production.
 
-If you use AI agents like Claude Code, check out the [medusa-dev Claude Code plugin](https://github.com/medusajs/medusa-claude-plugins).
+### Objective of the documentation
 
-### Other Agents
+- Have a quick reference for future installations
+- Avoid repeating common mistakes
+- Understand what's mandatory, what's only for development, and what changes in production
+- Serve as internal project documentation
 
-If you use AI agents other than Claude Code, copy the [skills directory](https://github.com/medusajs/medusa-claude-plugins/tree/main/plugins/medusa-dev/skills) into your agent's relevant `skills` directory.
+### Key concepts to understand beforehand
 
-### MCP Server
+Medusa is a standalone backend
 
-You can also add the MCP server `https://docs.medusajs.com/mcp` to your AI agents to answer questions related to Medusa. The `medusa-dev` Claude Code plugin includes this MCP server by default.
+- Medusa is NOT a frontend.
+- It runs as a headless backend.
+- The frontend (Next.js, etc.) connects via API.
 
-## Community & Contributions
+### Medusa Basic Architecture
 
-The community and core team are available in [GitHub Discussions](https://github.com/medusajs/medusa/discussions), where you can ask for support, discuss roadmap, and share ideas.
+- Modules → Data owners
+- Data Models → Internal structure of each module
+- Module Links → Relationships between modules (no foreign keys)
+- Queries → Data retrieval between modules
+- Services → Business logic
+- Workflows → Orchestration (order creation, payments, etc.)
+- API Routes → HTTP entry points
 
-Join our [Discord server](https://discord.com/invite/medusajs) to meet other community members.
+### start.sh: the heart of the boot
 
-## Other channels
+1. Common mistake
+    - Running seed without using exec causes a restart loop.
+2. Correct version of start.sh
 
-- [GitHub Issues](https://github.com/medusajs/medusa/issues)
-- [Twitter](https://twitter.com/medusajs)
-- [LinkedIn](https://www.linkedin.com/company/medusajs)
-- [Medusa Blog](https://medusajs.com/blog/)
+```
+#!/bin/sh
+set -e
+
+
+echo "Running database migrations..."
+npx medusa db:migrate
+
+
+echo "Starting Medusa development server..."
+exec npm run dev
+
+```
+
+3. Important rules
+   - DO NOT run seed on every boot
+   - The seed is executed only once, manually.
+   - exec is required to prevent Docker from restarting the container
+
+### Data seed
+
+1. Common mistake
+    - The seed is NOT idempotent
+    - Running it more than once breaks the boot process
+
+2. Correct form
+    ```
+    docker exec -it medusa_backend npm run seed
+    ```
+    Only the first time.
+
+### Dockerfile (DEV)
+
+```
+# Development Dockerfile for Medusa
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /server
+
+# Copy package files and npm config
+COPY package.json package-lock.json ./
+
+# Install all dependencies using npm
+RUN npm install --legacy-peer-deps
+
+# Copy source code
+COPY . .
+
+# Expose the port Medusa runs on
+EXPOSE 9000 5173
+
+# Start with migrations and then the development server
+ENTRYPOINT ["./start.sh"]
+```
+
+Notes:
+- Node.js 20+ is required.
+- Using /server avoids conflicts with the admin.
+
+### Dependencies (npm vs yarn)
+
+Problem
+ - The repo includes yarn.lock
+ - If you use npm → there's a conflict
+Solution
+
+```
+npm install --legacy-peer-deps
+```
+This generates package-lock.json and aligns Docker + local.
+
+### Environment variables (.env)
+Why do they exist?
+- Separate code and configuration
+- Avoid hardcoding secrets
+- Allow DEV/PROD without changing code
+
+### SSL and database (DEV vs PROD)
+
+Problem?
+
+- Postgres in Docker does NOT use SSL
+- Medusa attempts to use SSL by default
+
+*Correct solution in medusa-config.ts*
+
+```
+import { loadEnv, defineConfig } from "@medusajs/framework/utils"
+
+loadEnv(process.env.NODE_ENV || "development", process.cwd())
+
+const isProd = process.env.NODE_ENV === "production"
+
+module.exports = defineConfig({
+    projectConfig: {
+        databaseUrl: process.env.DATABASE_URL,
+        
+        databaseDriverOptions: isProd
+            ? {
+                ssl: {
+                    rejectUnauthorized: false,
+                },
+            }
+            : {
+                ssl: false,
+                sslmode: "disable",
+            },
+
+        http: {
+            storeCors: process.env.STORE_CORS!,
+            adminCors: process.env.ADMIN_CORS!,
+            authCors: process.env.AUTH_CORS!,
+            jwtSecret: process.env.JWT_SECRET || "supersecret",
+            cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+        },
+    },
+})
+```
+
+Golden Rule
+- Never disable SSL in production
+- Use Node.env to change behavior
+
+### Medusa Admin + Vite (Docker)
+
+Problem?
+
+- Vite doesn't work properly in Docker by default.
+- HMR and WebSocket fail.
+
+Solution? 
+
+*Configure Vite within medusa-config.ts:*
+
+```
+admin: {
+    vite: () => ({
+        server: {
+            host: "0.0.0.0",
+            allowedHosts: ["localhost", "127.0.0.1"],
+            
+            hmr: {
+                port: 5173,
+                clientPort: 5173,
+            },
+        },
+    }),
+},
+```
+
+This is for DEV only.
+
+### Create an Admin user in Medusa
+
+```
+docker exec -it medusa_backend npx medusa user \
+  -e admin@onefit.com \
+  -p supersecret
+```
